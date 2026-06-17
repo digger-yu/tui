@@ -1,0 +1,60 @@
+name: Twitter to Feishu Bot
+
+on:
+  # 每 15 分钟运行一次
+  schedule:
+    - cron: '*/15 * * * *'
+  
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run bot
+      env:
+        # 多账户配置 (JSON 格式)
+        ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
+        
+        # 飞书应用凭证
+        FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+        FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        
+        # 可选配置
+        TWEETS_COUNT: ${{ secrets.TWEETS_COUNT || '10' }}
+        TRANSLATOR_ENGINE: ${{ secrets.TRANSLATOR_ENGINE || 'google' }}
+        
+        # 标记 GitHub Actions 环境
+        GITHUB_ACTIONS: "true"
+      run: python main.py
+    
+    - name: Upload logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bot-logs
+        path: bot.log
+        retention-days: 7
