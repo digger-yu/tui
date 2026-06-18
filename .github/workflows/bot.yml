@@ -44,15 +44,16 @@ jobs:
         # 格式: [{"twitter_user": "用户名", "send_mode": "webhook", "phones": ["手机号"]}]
         # send_mode: "webhook" 发到群(需配 FEISHU_WEBHOOK_URL, 不需要 phones)
         # send_mode: "api" 私聊(需配 APP_ID/APP_SECRET 和 phones)
-        ACCOUNTS_JSON: '[{"twitter_user": "aleabitoreddit", "send_mode": "webhook"}]'
+        ACCOUNTS_JSON: '[{"twitter_user": "aleabitoreddit", "send_mode": "webhook"},
+                         {"twitter_user": "aleabitoreddit", "send_mode": "api", "phones": ["13xxxxxxxxx"]'
         
         # 飞书群机器人 Webhook URL（用于群消息，不需要 APP_ID/APP_SECRET）
         # 获取方式：飞书群设置 → 添加机器人 → 自定义机器人 → 复制 Webhook 地址
         FEISHU_WEBHOOK_URL: 'https://open.feishu.cn/open-apis/bot/v2/hook/REDACTED'
         
         # 如需使用应用 API 私聊方式（而非 Webhook 群消息），取消下面两行注释并填写：
-        # FEISHU_APP_ID: 'cli_xxxxxxxxxxxxxxxx'
-        # FEISHU_APP_SECRET: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+        FEISHU_APP_ID: 'cli_REDACTED_APP_ID'
+        FEISHU_APP_SECRET: 'REDACTED_APP_SECRET'
         
         # 可选配置
         TWEETS_COUNT: '1'
