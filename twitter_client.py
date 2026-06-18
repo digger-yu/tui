@@ -57,12 +57,18 @@ class NitterRSSClient:
     """
     
     # Nitter 实例列表（部分可能会失效，会自动尝试下一个）
+    # 来源: https://github.com/zedeus/nitter/wiki/Instances
     NITTER_INSTANCES = [
         "https://nitter.net",
+        "https://xcancel.com",
         "https://nitter.poast.org",
         "https://nitter.privacyredirect.com",
         "https://nitter.tiekoetter.com",
-        "https://xcancel.com",
+        "https://nitter.space",
+        "https://nitter.catsarch.com",
+        "https://nitter.kareem.one",
+        "https://lightbrd.com",
+        "https://nuku.trabun.org",
     ]
     
     def __init__(self, instance: str = None):
@@ -82,23 +88,27 @@ class NitterRSSClient:
             try:
                 # 在实例之间添加延迟，避免 429 Too Many Requests
                 if i > 0:
-                    time.sleep(2)
+                    time.sleep(3)
                 
-                url = f"{instance}/{username}/rss"
+                # xcancel.com 使用不同的 RSS URL 格式
+                if "xcancel.com" in instance:
+                    url = f"{instance}/{username}/rss"
+                else:
+                    url = f"{instance}/{username}/rss"
+                
                 logger.info(f"尝试 Nitter RSS: {instance}")
                 
-                response = self.session.get(url, timeout=15)
-                response.raise_for_status()
+                response = self.session.get(url, timeout=20)
                 
                 # 检查是否成功获取到 RSS
-                if response.status_code == 200 and len(response.text) > 1000:
+                if response.status_code == 200 and len(response.text) > 500:
                     # 验证是否是有效的 RSS
                     if '<rss' in response.text and '<item>' in response.text:
                         logger.info(f"成功使用 Nitter 实例: {instance}")
                         self.instance = instance
                         return response.text
                     else:
-                        logger.warning(f"实例 {instance} 返回了非 RSS 内容")
+                        logger.warning(f"实例 {instance} 返回了非 RSS 内容 (前200字符: {response.text[:200]})")
                 else:
                     logger.warning(f"实例 {instance} 未返回有效数据 (status={response.status_code}, len={len(response.text)})")
                     
