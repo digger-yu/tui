@@ -48,3 +48,28 @@
 2026-06-18 06:46:38,151 - __main__ - INFO - 用户 @aleabitoreddit 没有新推文
 2026-06-18 06:46:40,151 - __main__ - INFO - 所有账户处理完成
 2026-06-18 06:46:40,151 - __main__ - INFO - 单次运行完成
+2026-06-18 06:54:32,882 - __main__ - INFO - 运行在 GitHub Actions 环境
+2026-06-18 06:54:32,883 - __main__ - INFO - 配置检查通过，监控 1 个账户
+2026-06-18 06:54:32,883 - __main__ - INFO -   - @aleabitoreddit
+2026-06-18 06:54:32,883 - twitter_client - INFO - 使用 Nitter RSS 客户端（免登录）
+2026-06-18 06:54:32,883 - storage - ERROR - 加载存储文件失败: Expecting value: line 1 column 1 (char 0)
+2026-06-18 06:54:32,883 - __main__ - INFO - 使用 Webhook 群消息方式
+2026-06-18 06:54:32,883 - __main__ - INFO - ==================================================
+2026-06-18 06:54:32,883 - __main__ - INFO - Twitter to Feishu Bot - 单次运行
+2026-06-18 06:54:32,883 - __main__ - INFO - ==================================================
+2026-06-18 06:54:32,883 - __main__ - INFO - 开始处理 1 个账户...
+2026-06-18 06:54:32,883 - __main__ - INFO - 处理账户: @aleabitoreddit -> Webhook 群消息
+2026-06-18 06:54:32,883 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.net
+2026-06-18 06:54:33,687 - twitter_client - INFO - 成功使用 Nitter 实例: https://nitter.net
+2026-06-18 06:54:33,688 - twitter_client - INFO - 找到 19 条推文
+2026-06-18 06:54:33,691 - twitter_client - INFO - 成功解析 1 条推文
+2026-06-18 06:54:33,691 - __main__ - INFO - 用户 @aleabitoreddit 发现 1 条新推文
+2026-06-18 06:54:33,691 - __main__ - INFO - 处理推文: 2067429702319673542
+2026-06-18 06:54:33,691 - translator - INFO - 使用 Google 翻译
+2026-06-18 06:54:34,266 - __main__ - INFO - 原文: The 1st large scale X study on stock market net worth has finished!From the 6000+ responses of those...
+2026-06-18 06:54:34,267 - __main__ - INFO - 译文: 第一个关于股票市场净值的大规模 X 研究已经完成！从 X 财经活跃用户的 6000 多个回复中，结果如下：5.8% - $10M+15% - $1m - $10M35.9% - $100k - $1M...
+2026-06-18 06:54:35,240 - feishu_client - INFO - Webhook 消息发送成功
+2026-06-18 06:54:35,241 - __main__ - INFO - 推文 2067429702319673542 已成功发送到群
+2026-06-18 06:54:35,242 - storage - INFO - 标记推文 2067429702319673542 为已处理
+2026-06-18 06:54:38,242 - __main__ - INFO - 所有账户处理完成
+2026-06-18 06:54:38,242 - __main__ - INFO - 单次运行完成
