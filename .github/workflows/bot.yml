@@ -36,20 +36,25 @@ jobs:
     
     - name: Run bot
       env:
+        # ==========================================
+        # 直接配置（私人项目，明文即可，无需 GitHub Secrets）
+        # ==========================================
+        
         # 多账户配置 (JSON 格式)
-        #ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
+        # 格式: [{"twitter_user": "用户名", "phones": ["手机号1", "手机号2"]}]
         ACCOUNTS_JSON: '[{"twitter_user":"aleabitoreddit","phones":["13xxxxxxxxx","18201375969"]}]'
-        FEISHU_APP_ID: cli_REDACTED_APP_ID
-        FEISHU_APP_SECRET: REDACTED_APP_SECRET
-        # 飞书应用凭证
-        #FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
-        #FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        
         # 飞书群机器人 Webhook URL（用于群消息，不需要 APP_ID/APP_SECRET）
         # 获取方式：飞书群设置 → 添加机器人 → 自定义机器人 → 复制 Webhook 地址
         FEISHU_WEBHOOK_URL: 'https://open.feishu.cn/open-apis/bot/v2/hook/REDACTED'
+        
+        # 如需使用应用 API 私聊方式（而非 Webhook 群消息），取消下面两行注释并填写：
+        # FEISHU_APP_ID: 'cli_xxxxxxxxxxxxxxxx'
+        # FEISHU_APP_SECRET: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+        
         # 可选配置
-        TWEETS_COUNT: ${{ secrets.TWEETS_COUNT || '1' }}
-        TRANSLATOR_ENGINE: ${{ secrets.TRANSLATOR_ENGINE || 'google' }}
+        TWEETS_COUNT: '1'
+        TRANSLATOR_ENGINE: 'google'
         
         # 标记 GitHub Actions 环境
         GITHUB_ACTIONS: "true"
