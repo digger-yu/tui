@@ -15,6 +15,9 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        # 允许 workflow 提交更改回仓库
+        token: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -44,8 +47,7 @@ jobs:
         # 格式: [{"twitter_user": "用户名", "send_mode": "webhook", "phones": ["手机号"]}]
         # send_mode: "webhook" 发到群(需配 FEISHU_WEBHOOK_URL, 不需要 phones)
         # send_mode: "api" 私聊(需配 APP_ID/APP_SECRET 和 phones)
-        #ACCOUNTS_JSON: '[{"twitter_user": "aleabitoreddit", "send_mode": "webhook"}]'
-        ACCOUNTS_JSON: '[{"twitter_user": "aleabitoreddit", "send_mode": "webhook"}]'                
+        ACCOUNTS_JSON: '[{"twitter_user": "aleabitoreddit", "send_mode": "webhook"}]'
         
         # 飞书群机器人 Webhook URL（用于群消息，不需要 APP_ID/APP_SECRET）
         # 获取方式：飞书群设置 → 添加机器人 → 自定义机器人 → 复制 Webhook 地址
@@ -62,6 +64,15 @@ jobs:
         # 标记 GitHub Actions 环境
         GITHUB_ACTIONS: "true"
       run: python main.py
+    
+    - name: Commit processed tweets
+      if: always()
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add processed_tweets.json bot.log
+        git diff --cached --quiet || git commit -m "Update processed tweets [skip ci]"
+        git push
     
     - name: Upload logs
       if: always()
