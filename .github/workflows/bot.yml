@@ -3,7 +3,7 @@ name: Twitter to Feishu Bot
 on:
   # 每 15 分钟运行一次,*/15 是按 UTC 时间每小时的 00、15、30、45 分触发，不是从你 push 开始算。北京时间（UTC+8）对应的是每小时的 08、23、38、53 分。
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '0 * * * *'
   
   # 允许手动触发
   workflow_dispatch:
