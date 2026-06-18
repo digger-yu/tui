@@ -44,7 +44,9 @@ jobs:
         # 飞书应用凭证
         #FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
         #FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
-        
+        # 飞书群机器人 Webhook URL（用于群消息，不需要 APP_ID/APP_SECRET）
+        # 获取方式：飞书群设置 → 添加机器人 → 自定义机器人 → 复制 Webhook 地址
+        FEISHU_WEBHOOK_URL: 'https://open.feishu.cn/open-apis/bot/v2/hook/REDACTED'
         # 可选配置
         TWEETS_COUNT: ${{ secrets.TWEETS_COUNT || '1' }}
         TRANSLATOR_ENGINE: ${{ secrets.TRANSLATOR_ENGINE || 'google' }}
