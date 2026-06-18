@@ -91,3 +91,38 @@
 2026-06-18 07:29:42,066 - __main__ - INFO - 用户 @aleabitoreddit 发现 0 条新推文
 2026-06-18 07:29:44,067 - __main__ - INFO - 所有账户处理完成
 2026-06-18 07:29:44,067 - __main__ - INFO - 单次运行完成
+2026-06-18 08:52:46,989 - __main__ - INFO - 运行在 GitHub Actions 环境
+2026-06-18 08:52:46,990 - __main__ - INFO - 配置检查通过，监控 1 个账户
+2026-06-18 08:52:46,990 - __main__ - INFO -   - @aleabitoreddit
+2026-06-18 08:52:46,990 - twitter_client - INFO - 使用 Nitter RSS 客户端（免登录）
+2026-06-18 08:52:46,990 - storage - INFO - 已加载 1 条已处理推文记录
+2026-06-18 08:52:46,990 - __main__ - INFO - 使用 Webhook 群消息方式
+2026-06-18 08:52:46,990 - __main__ - INFO - ==================================================
+2026-06-18 08:52:46,990 - __main__ - INFO - Twitter to Feishu Bot - 单次运行
+2026-06-18 08:52:46,990 - __main__ - INFO - ==================================================
+2026-06-18 08:52:46,990 - __main__ - INFO - 开始处理 1 个账户...
+2026-06-18 08:52:46,990 - __main__ - INFO - 处理账户: @aleabitoreddit -> Webhook 群消息
+2026-06-18 08:52:46,990 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.net
+2026-06-18 08:52:47,480 - twitter_client - WARNING - 实例 https://nitter.net 未返回有效数据 (status=429, len=0)
+2026-06-18 08:52:50,480 - twitter_client - INFO - 尝试 Nitter RSS: https://xcancel.com
+2026-06-18 08:52:51,101 - twitter_client - WARNING - 实例 https://xcancel.com 未返回有效数据 (status=400, len=49)
+2026-06-18 08:52:54,101 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.poast.org
+2026-06-18 08:52:54,335 - twitter_client - WARNING - 实例 https://nitter.poast.org 未返回有效数据 (status=403, len=19973)
+2026-06-18 08:52:57,335 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.privacyredirect.com
+2026-06-18 08:52:57,934 - twitter_client - WARNING - 实例 https://nitter.privacyredirect.com 返回了非 RSS 内容 (前200字符: <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=v1.25.0"><meta name="viewport" conten)
+2026-06-18 08:53:00,934 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.tiekoetter.com
+2026-06-18 08:53:01,881 - twitter_client - WARNING - 实例 https://nitter.tiekoetter.com 返回了非 RSS 内容 (前200字符: <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=v1.25.1-0.20260617231326-40d497332ee5)
+2026-06-18 08:53:04,882 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.space
+2026-06-18 08:53:04,974 - twitter_client - WARNING - 实例 https://nitter.space 未返回有效数据 (status=403, len=5467)
+2026-06-18 08:53:07,974 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.catsarch.com
+2026-06-18 08:53:08,318 - twitter_client - WARNING - 实例 https://nitter.catsarch.com 返回了非 RSS 内容 (前200字符: <!doctype html><html lang="en"><head><title>Making sure you&#39;re not a bot!</title><link rel="stylesheet" href="/.within.website/x/xess/xess.min.css?cachebuster=1.25.0"><meta name="viewport" content)
+2026-06-18 08:53:11,318 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.kareem.one
+2026-06-18 08:53:11,417 - twitter_client - WARNING - 实例 https://nitter.kareem.one 未返回有效数据 (status=403, len=5675)
+2026-06-18 08:53:14,417 - twitter_client - INFO - 尝试 Nitter RSS: https://lightbrd.com
+2026-06-18 08:53:14,538 - twitter_client - WARNING - 实例 https://lightbrd.com 未返回有效数据 (status=403, len=5467)
+2026-06-18 08:53:17,538 - twitter_client - INFO - 尝试 Nitter RSS: https://nuku.trabun.org
+2026-06-18 08:53:17,675 - twitter_client - WARNING - 实例 https://nuku.trabun.org 未返回有效数据 (status=403, len=5673)
+2026-06-18 08:53:17,676 - twitter_client - ERROR - 所有 Nitter 实例都不可用
+2026-06-18 08:53:17,676 - __main__ - INFO - 用户 @aleabitoreddit 没有新推文
+2026-06-18 08:53:19,677 - __main__ - INFO - 所有账户处理完成
+2026-06-18 08:53:19,677 - __main__ - INFO - 单次运行完成
