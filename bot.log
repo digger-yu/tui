@@ -23,3 +23,28 @@
 2026-06-18 04:36:16,484 - __main__ - INFO - 用户 @aleabitoreddit 没有新推文
 2026-06-18 04:36:18,485 - __main__ - INFO - 所有账户处理完成
 2026-06-18 04:36:18,485 - __main__ - INFO - 单次运行完成
+2026-06-18 06:46:26,649 - __main__ - INFO - 运行在 GitHub Actions 环境
+2026-06-18 06:46:26,649 - __main__ - INFO - 配置检查通过，监控 1 个账户
+2026-06-18 06:46:26,649 - __main__ - INFO -   - @aleabitoreddit
+2026-06-18 06:46:26,650 - twitter_client - INFO - 使用 Nitter RSS 客户端（免登录）
+2026-06-18 06:46:26,650 - storage - ERROR - 加载存储文件失败: Expecting value: line 1 column 1 (char 0)
+2026-06-18 06:46:26,650 - __main__ - INFO - 使用 Webhook 群消息方式
+2026-06-18 06:46:26,650 - __main__ - INFO - ==================================================
+2026-06-18 06:46:26,650 - __main__ - INFO - Twitter to Feishu Bot - 单次运行
+2026-06-18 06:46:26,650 - __main__ - INFO - ==================================================
+2026-06-18 06:46:26,650 - __main__ - INFO - 开始处理 1 个账户...
+2026-06-18 06:46:26,650 - __main__ - INFO - 处理账户: @aleabitoreddit -> Webhook 群消息
+2026-06-18 06:46:26,650 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.net
+2026-06-18 06:46:27,245 - twitter_client - WARNING - 实例 https://nitter.net 请求失败: 429 Client Error: Too Many Requests for url: https://nitter.net/aleabitoreddit/rss
+2026-06-18 06:46:29,246 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.poast.org
+2026-06-18 06:46:29,564 - twitter_client - WARNING - 实例 https://nitter.poast.org 请求失败: 403 Client Error: Forbidden for url: https://nitter.poast.org/aleabitoreddit/rss
+2026-06-18 06:46:31,564 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.privacyredirect.com
+2026-06-18 06:46:32,349 - twitter_client - WARNING - 实例 https://nitter.privacyredirect.com 返回了非 RSS 内容
+2026-06-18 06:46:34,349 - twitter_client - INFO - 尝试 Nitter RSS: https://nitter.tiekoetter.com
+2026-06-18 06:46:34,913 - twitter_client - WARNING - 实例 https://nitter.tiekoetter.com 返回了非 RSS 内容
+2026-06-18 06:46:36,913 - twitter_client - INFO - 尝试 Nitter RSS: https://xcancel.com
+2026-06-18 06:46:38,151 - twitter_client - WARNING - 实例 https://xcancel.com 请求失败: 400 Client Error: Bad Request for url: https://rss.xcancel.com/aleabitoreddit/rss
+2026-06-18 06:46:38,151 - twitter_client - ERROR - 所有 Nitter 实例都不可用
+2026-06-18 06:46:38,151 - __main__ - INFO - 用户 @aleabitoreddit 没有新推文
+2026-06-18 06:46:40,151 - __main__ - INFO - 所有账户处理完成
+2026-06-18 06:46:40,151 - __main__ - INFO - 单次运行完成
