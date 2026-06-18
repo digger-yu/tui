@@ -37,14 +37,16 @@ jobs:
     - name: Run bot
       env:
         # 多账户配置 (JSON 格式)
-        ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
-        
+        #ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
+          ACCOUNTS_JSON: '[{"twitter_user":"aleabitoreddit","phones":["13xxxxxxxxx","18201375969"]}]'
+          FEISHU_APP_ID: cli_REDACTED_APP_ID
+          FEISHU_APP_SECRET: REDACTED_APP_SECRET
         # 飞书应用凭证
-        FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
-        FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        #FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+        #FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
         
         # 可选配置
-        TWEETS_COUNT: ${{ secrets.TWEETS_COUNT || '10' }}
+        TWEETS_COUNT: ${{ secrets.TWEETS_COUNT || '1' }}
         TRANSLATOR_ENGINE: ${{ secrets.TRANSLATOR_ENGINE || 'google' }}
         
         # 标记 GitHub Actions 环境
