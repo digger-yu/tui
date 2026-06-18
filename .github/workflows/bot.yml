@@ -70,6 +70,8 @@ jobs:
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
+        # 确保文件存在再添加（第一次运行可能没有 processed_tweets.json）
+        touch processed_tweets.json
         git add processed_tweets.json bot.log
         git diff --cached --quiet || git commit -m "Update processed tweets [skip ci]"
         git push
