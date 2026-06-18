@@ -23,12 +23,20 @@ class TweetStorage:
             logger.info(f"存储文件不存在，创建新文件: {self.filepath}")
             return set()
         
+        # 检查文件是否为空（touch 创建的空文件）
+        if os.path.getsize(self.filepath) == 0:
+            logger.info(f"存储文件为空，初始化新记录: {self.filepath}")
+            return set()
+        
         try:
             with open(self.filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 ids = set(data.get("processed_ids", []))
                 logger.info(f"已加载 {len(ids)} 条已处理推文记录")
                 return ids
+        except json.JSONDecodeError as e:
+            logger.error(f"存储文件 JSON 格式错误: {e}，将重置为空记录")
+            return set()
         except Exception as e:
             logger.error(f"加载存储文件失败: {e}")
             return set()
