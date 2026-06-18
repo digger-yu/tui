@@ -41,8 +41,10 @@ jobs:
         # ==========================================
         
         # 多账户配置 (JSON 格式)
-        # 格式: [{"twitter_user": "用户名", "phones": ["手机号1", "手机号2"]}]
-        ACCOUNTS_JSON: '[{"twitter_user":"aleabitoreddit","phones":["13xxxxxxxxx","18201375969"]}]'
+        # 格式: [{"twitter_user": "用户名", "send_mode": "webhook", "phones": ["手机号"]}]
+        # send_mode: "webhook" 发到群(需配 FEISHU_WEBHOOK_URL, 不需要 phones)
+        # send_mode: "api" 私聊(需配 APP_ID/APP_SECRET 和 phones)
+        ACCOUNTS_JSON: '[{"twitter_user": "aleabitoreddit", "send_mode": "webhook"}]'
         
         # 飞书群机器人 Webhook URL（用于群消息，不需要 APP_ID/APP_SECRET）
         # 获取方式：飞书群设置 → 添加机器人 → 自定义机器人 → 复制 Webhook 地址
