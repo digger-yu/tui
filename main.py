@@ -4,7 +4,9 @@ Twitter to Feishu Bot - 主程序
 功能:
 1. 定时获取多个 Twitter 用户的最新推文
 2. 将推文翻译成中文
-3. 通过飞书发送翻译后的推文到指定手机号
+3. 通过飞书发送翻译后的推文
+   - 支持应用 API 发送私聊消息到手机号
+   - 支持 Webhook 发送群消息
 
 使用方法:
 1. 复制 .env.example 为 .env，填写你的 API 密钥
@@ -14,7 +16,7 @@ Twitter to Feishu Bot - 主程序
 
 GitHub Actions 使用:
 - 设置环境变量 ACCOUNTS_JSON
-- 设置 FEISHU_APP_ID 和 FEISHU_APP_SECRET
+- 设置飞书凭证 (FEISHU_APP_ID + FEISHU_APP_SECRET 或 FEISHU_WEBHOOK_URL)
 - 工作流会每 15 分钟自动运行一次
 """
 import os
@@ -30,7 +32,7 @@ load_dotenv()
 import config
 from twitter_client import get_twitter_client, Tweet
 from translator import translate_tweet
-from feishu_client import get_feishu_client, FeishuClient
+from feishu_client import get_feishu_client, FeishuClient, FeishuWebhookClient
 from storage import TweetStorage
 
 # 配置日志
@@ -46,13 +48,22 @@ logger = logging.getLogger(__name__)
 
 
 class TwitterToFeishuBot:
-    """Twitter 到飞书机器人 - 支持多账户"""
+    """Twitter 到飞书机器人 - 支持多账户和多种发送方式"""
     
     def __init__(self):
         self.twitter_client = get_twitter_client()
-        self.feishu_client = get_feishu_client()
         self.storage = TweetStorage()
         self.running = False
+        
+        # 根据配置选择发送方式
+        if config.FEISHU_WEBHOOK_URL:
+            logger.info("使用 Webhook 群消息方式")
+            self.feishu_client = FeishuWebhookClient(config.FEISHU_WEBHOOK_URL)
+            self.use_webhook = True
+        else:
+            logger.info("使用应用 API 私聊方式")
+            self.feishu_client = get_feishu_client()
+            self.use_webhook = False
     
     def process_all_accounts(self):
         """处理所有配置的账户"""
@@ -62,11 +73,14 @@ class TwitterToFeishuBot:
             twitter_user = account.get("twitter_user", "")
             phones = account.get("phones", [])
             
-            if not twitter_user or not phones:
+            if not twitter_user:
                 logger.warning(f"账户配置不完整: {account}")
                 continue
             
-            logger.info(f"处理账户: @{twitter_user} -> 手机号: {phones}")
+            if self.use_webhook:
+                logger.info(f"处理账户: @{twitter_user} -> Webhook 群消息")
+            else:
+                logger.info(f"处理账户: @{twitter_user} -> 手机号: {phones}")
             
             try:
                 self.process_account(twitter_user, phones)
@@ -109,7 +123,7 @@ class TwitterToFeishuBot:
                 logger.error(f"处理推文 {tweet.tweet_id} 时出错: {e}")
     
     def _process_single_tweet(self, tweet: Tweet, phones: list):
-        """处理单条推文并发送到多个手机号"""
+        """处理单条推文并发送"""
         logger.info(f"处理推文: {tweet.tweet_id}")
         
         # 1. 翻译推文
@@ -123,17 +137,29 @@ class TwitterToFeishuBot:
         # 2. 构建消息内容
         message_content = self._build_message(tweet, original, translated)
         
-        # 3. 发送消息到所有配置的手机号
-        for phone in phones:
+        # 3. 根据发送方式发送消息
+        if self.use_webhook:
+            # Webhook 群消息
             try:
-                success = self.feishu_client.send_message_by_phone(phone, message_content)
+                success = self.feishu_client.send_text(message_content)
                 if success:
-                    logger.info(f"推文 {tweet.tweet_id} 已成功发送到 {phone}")
+                    logger.info(f"推文 {tweet.tweet_id} 已成功发送到群")
                 else:
-                    logger.error(f"发送推文 {tweet.tweet_id} 到 {phone} 失败")
-                time.sleep(0.5)  # 手机号之间添加小延迟
+                    logger.error(f"发送推文 {tweet.tweet_id} 到群失败")
             except Exception as e:
-                logger.error(f"发送到 {phone} 时出错: {e}")
+                logger.error(f"Webhook 发送时出错: {e}")
+        else:
+            # 应用 API 私聊消息
+            for phone in phones:
+                try:
+                    success = self.feishu_client.send_message_by_phone(phone, message_content)
+                    if success:
+                        logger.info(f"推文 {tweet.tweet_id} 已成功发送到 {phone}")
+                    else:
+                        logger.error(f"发送推文 {tweet.tweet_id} 到 {phone} 失败")
+                    time.sleep(0.5)  # 手机号之间添加小延迟
+                except Exception as e:
+                    logger.error(f"发送到 {phone} 时出错: {e}")
     
     def _build_message(self, tweet: Tweet, original: str, translated: str) -> str:
         """构建消息文本"""
@@ -223,10 +249,6 @@ class TwitterToFeishuBot:
         first_account = config.ACCOUNTS[0]
         phones = first_account.get("phones", [])
         
-        if not phones:
-            logger.error("第一个账户没有配置手机号")
-            return
-        
         test_content = """🧪 测试消息
 
 这是 Twitter to Feishu Bot 的测试消息。
@@ -235,23 +257,35 @@ class TwitterToFeishuBot:
 当前配置账户:
 """
         for acc in config.ACCOUNTS:
-            test_content += f"- @{acc.get('twitter_user', '')} -> {acc.get('phones', [])}\n"
+            test_content += f"- @{acc.get('twitter_user', '')}\n"
         
-        for phone in phones:
-            success = self.feishu_client.send_message_by_phone(phone, test_content)
+        if self.use_webhook:
+            # Webhook 测试
+            success = self.feishu_client.send_text(test_content)
             if success:
-                logger.info(f"测试消息发送成功到 {phone}！")
+                logger.info("测试消息已通过 Webhook 发送到群！")
             else:
-                logger.error(f"测试消息发送到 {phone} 失败")
+                logger.error("Webhook 测试消息发送失败")
+        else:
+            # 应用 API 测试
+            if not phones:
+                logger.error("第一个账户没有配置手机号")
+                return
+            for phone in phones:
+                success = self.feishu_client.send_message_by_phone(phone, test_content)
+                if success:
+                    logger.info(f"测试消息发送成功到 {phone}！")
+                else:
+                    logger.error(f"测试消息发送到 {phone} 失败")
 
 
 def check_config():
     """检查配置是否完整"""
     errors = []
     
-    # 检查飞书配置 (必须)
-    if not config.FEISHU_APP_ID or not config.FEISHU_APP_SECRET:
-        errors.append("未配置飞书应用凭证 (FEISHU_APP_ID 和 FEISHU_APP_SECRET)")
+    # 检查飞书配置 (至少配置一种)
+    if not config.FEISHU_WEBHOOK_URL and (not config.FEISHU_APP_ID or not config.FEISHU_APP_SECRET):
+        errors.append("未配置飞书凭证。请配置 FEISHU_WEBHOOK_URL 或 FEISHU_APP_ID + FEISHU_APP_SECRET")
     
     # 检查账户配置
     if not config.ACCOUNTS:
@@ -260,7 +294,8 @@ def check_config():
         for i, account in enumerate(config.ACCOUNTS):
             if not account.get("twitter_user"):
                 errors.append(f"账户 {i+1} 未配置 twitter_user")
-            if not account.get("phones"):
+            # Webhook 方式不需要手机号
+            if not config.FEISHU_WEBHOOK_URL and not account.get("phones"):
                 errors.append(f"账户 {i+1} 未配置 phones")
     
     if errors:
@@ -272,7 +307,7 @@ def check_config():
     
     logger.info(f"配置检查通过，监控 {len(config.ACCOUNTS)} 个账户")
     for acc in config.ACCOUNTS:
-        logger.info(f"  - @{acc['twitter_user']} -> {acc['phones']}")
+        logger.info(f"  - @{acc['twitter_user']}")
     return True
 
 
@@ -295,6 +330,10 @@ def main():
 ╚══════════════════════════════════════════╝
 
 功能: 获取 Twitter 推文 → 翻译为中文 → 发送到飞书
+
+发送方式:
+- 配置了 FEISHU_WEBHOOK_URL: 发送到飞书群
+- 配置了 FEISHU_APP_ID + FEISHU_APP_SECRET: 发送私聊消息到手机号
 
 请选择运行模式:
 1. 单次运行 (获取一次推文并发送)
