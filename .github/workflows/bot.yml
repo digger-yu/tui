@@ -3,8 +3,6 @@ name: Twitter to Feishu Bot
 on:
   schedule:
     - cron: '*/15 * * * *'
-  
-  # 允许手动触发
   workflow_dispatch:
 
 permissions:
