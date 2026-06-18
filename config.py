@@ -62,7 +62,7 @@ if not _accounts_json and (TARGET_TWITTER_USER or TARGET_PHONE):
     }]
 
 # 每次获取的推文数量 (最大 100)
-TWEETS_COUNT = int(os.getenv("TWEETS_COUNT", "10"))
+TWEETS_COUNT = int(os.getenv("TWEETS_COUNT", "1"))
 
 # ==================== 翻译配置 ====================
 TRANSLATOR_ENGINE = os.getenv("TRANSLATOR_ENGINE", "google")  # google, baidu, deepl
