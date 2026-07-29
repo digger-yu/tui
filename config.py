@@ -17,7 +17,7 @@ DEFAULT_ACCOUNTS = [
     {
         "twitter_user": "aleabitoreddit",
         "send_mode": "webhook",
-        "phones": ["13xxxxxxxxx"]
+        "phones": []
     },
 ]
 
