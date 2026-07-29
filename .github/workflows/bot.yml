@@ -42,27 +42,31 @@ jobs:
     - name: Run bot
       env:
         # ==========================================
-        # 直接配置（私人项目，明文即可，无需 GitHub Secrets）
+        # 通过 GitHub Secrets 注入凭证（公开项目，保护敏感信息）
         # ==========================================
-        
+
         # 多账户配置 (JSON 格式)
         # 格式: [{"twitter_user": "用户名", "send_mode": "webhook", "phones": ["手机号"]}]
         # send_mode: "webhook" 发到群(需配 FEISHU_WEBHOOK_URL, 不需要 phones)
         # send_mode: "api" 私聊(需配 APP_ID/APP_SECRET 和 phones)
         ACCOUNTS_JSON: '[{"twitter_user": "aleabitoreddit", "send_mode": "webhook"}]'
-        
+
         # 飞书群机器人 Webhook URL（用于群消息，不需要 APP_ID/APP_SECRET）
-        # 获取方式：飞书群设置 → 添加机器人 → 自定义机器人 → 复制 Webhook 地址
-        FEISHU_WEBHOOK_URL: 'https://open.feishu.cn/open-apis/bot/v2/hook/REDACTED'
-        
-        # 如需使用应用 API 私聊方式（而非 Webhook 群消息），取消下面两行注释并填写：
-        FEISHU_APP_ID: 'cli_REDACTED_APP_ID'
-        FEISHU_APP_SECRET: 'REDACTED_APP_SECRET'
-        
+        # 通过 Settings → Secrets and variables → Actions 添加 FEISHU_WEBHOOK_URL
+        FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+
+        # 如需使用应用 API 私聊方式（而非 Webhook 群消息），取消下面两行注释
+        # 并在仓库 Settings → Secrets and variables → Actions 中添加 FEISHU_APP_ID / FEISHU_APP_SECRET
+        # FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+        # FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+        # 示例:
+        # FEISHU_APP_ID: 'cli_xxxxxxxxxxxxxxxx'
+        # FEISHU_APP_SECRET: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
         # 可选配置
         TWEETS_COUNT: '1'
         TRANSLATOR_ENGINE: 'google'
-        
+
         # 标记 GitHub Actions 环境
         GITHUB_ACTIONS: "true"
       run: python main.py
