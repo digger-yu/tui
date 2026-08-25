@@ -1,10 +1,11 @@
 """
 X.com (Twitter) 推文获取模块
 支持多种方式获取推文:
-1. Vanlett HTML - 免登录，无需API，Nitter 替代方案，推荐
-2. Nitter RSS Feed - 免登录，无需API（Nitter 实例已大多失效）
-3. Twitter API v2 (官方，需申请开发者账号)
-4. 第三方 Twitter API 代理服务
+1. Syndication API - Twitter 官方嵌入式推文端点，无需认证，最稳定
+2. Vanlett HTML - 免登录，需浏览器绕过 Cloudflare（仅本地桌面）
+3. Nitter RSS Feed - 免登录，无需API（Nitter 实例已大多失效）
+4. Twitter API v2 (官方，需申请开发者账号)
+5. 第三方 Twitter API 代理服务
 """
 import logging
 import requests
@@ -574,23 +575,106 @@ class TwitterProxyClient:
             return []
 
 
+class SyndicationClient:
+    """
+    Twitter 官方 syndication API 客户端
+    无需认证，返回用户最近 ~20 条推文
+    该端点为嵌入式推文卡片提供服务，非常稳定
+    """
+
+    BASE_URL = "https://syndication.twitter.com/srv/timeline-profile/screen-name"
+
+    def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
+        url = f"{self.BASE_URL}/{username}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36",
+        }
+
+        try:
+            logger.info(f"通过 syndication API 获取用户 @{username} 的推文")
+            resp = requests.get(url, headers=headers, timeout=15)
+            resp.raise_for_status()
+
+            import re
+            m = re.search(
+                r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
+                resp.text, re.DOTALL,
+            )
+            if not m:
+                logger.warning(f"syndication 响应中未找到 __NEXT_DATA__: @{username}")
+                return []
+
+            import json
+            data = json.loads(m.group(1))
+            entries = (
+                data.get("props", {})
+                .get("pageProps", {})
+                .get("timeline", {})
+                .get("entries", [])
+            )
+
+            tweets = []
+            for entry in entries:
+                tweet_data = entry.get("content", {}).get("tweet", {})
+                if not tweet_data:
+                    continue
+
+                tweet_id = tweet_data.get("id_str", "")
+                text = tweet_data.get("text", "")
+                created_at = tweet_data.get("created_at", "")
+                author = tweet_data.get("user", {}).get("screen_name", username)
+
+                media_urls = []
+                for media in tweet_data.get("media", []) or []:
+                    m_url = media.get("media_url_https") or media.get("media_url")
+                    if m_url:
+                        media_urls.append(m_url)
+
+                tweet = Tweet(
+                    tweet_id=tweet_id,
+                    text=text,
+                    created_at=created_at,
+                    author=author,
+                    url=f"https://x.com/{author}/status/{tweet_id}",
+                    media_urls=media_urls,
+                )
+                tweets.append(tweet)
+
+                if len(tweets) >= max_results:
+                    break
+
+            logger.info(f"成功获取 {len(tweets)} 条推文")
+            return tweets
+
+        except requests.exceptions.HTTPError as e:
+            if resp.status_code == 429:
+                logger.warning(f"syndication API 限流 (429): @{username}")
+            else:
+                logger.error(f"syndication API 请求失败: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"syndication API 请求失败: {e}")
+            return []
+
+
 class FallbackClient:
     """
-    组合客户端 - 先尝试 Vanlett，失败后回退到 Nitter RSS
-    Vanlett 在本地桌面环境可绕过 Cloudflare，但在 CI 数据中心 IP 上可能失败；
-    Nitter RSS 在 CI 上更稳定（纯 HTTP，无 Cloudflare 防护）
+    组合客户端 - 按优先级尝试多个数据源
+    1. Syndication API (最稳定，无需认证，CI/本地均可)
+    2. Vanlett (本地桌面可绕 Cloudflare，CI 不可用)
+    3. Nitter RSS (实例大多已失效，最后兜底)
     """
 
     def __init__(self):
+        self._syndication = None
         self._vanlett = None
         self._nitter = None
-        # CI 环境直接用 Nitter（Vanlett 的 Cloudflare 验证在数据中心 IP 上无法通过）
-        import os
-        if os.getenv("GITHUB_ACTIONS") == "true":
-            self._primary = "nitter"
-            logger.info("检测到 CI 环境，优先使用 Nitter RSS")
-        else:
-            self._primary = "vanlett"
+
+    def _get_syndication(self):
+        if self._syndication is None:
+            self._syndication = SyndicationClient()
+        return self._syndication
 
     def _get_vanlett(self):
         if self._vanlett is None:
@@ -603,8 +687,19 @@ class FallbackClient:
         return self._nitter
 
     def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
-        # 先尝试 Vanlett
-        if self._primary == "vanlett":
+        # 1. 优先用 syndication API（最稳定）
+        try:
+            client = self._get_syndication()
+            tweets = client.get_user_tweets(username, max_results)
+            if tweets:
+                return tweets
+            logger.info("syndication 未获取到推文，尝试 Vanlett")
+        except Exception as e:
+            logger.warning(f"syndication 失败，尝试 Vanlett: {e}")
+
+        # 2. 尝试 Vanlett（本地可用，CI 会超时）
+        import os
+        if os.getenv("GITHUB_ACTIONS") != "true":
             try:
                 client = self._get_vanlett()
                 tweets = client.get_user_tweets(username, max_results)
@@ -614,7 +709,7 @@ class FallbackClient:
             except Exception as e:
                 logger.warning(f"Vanlett 失败，回退到 Nitter RSS: {e}")
 
-        # 回退到 Nitter RSS
+        # 3. 最后兜底 Nitter RSS
         try:
             client = self._get_nitter()
             tweets = client.get_user_tweets(username, max_results)
@@ -634,9 +729,9 @@ class FallbackClient:
 def get_twitter_client():
     """
     获取可用的 Twitter 客户端
-    使用 FallbackClient: 先 Vanlett（本地优先），失败回退 Nitter RSS（CI 优先）
+    使用 FallbackClient: Syndication -> Vanlett -> Nitter RSS
     """
-    logger.info("使用 Fallback 客户端（Vanlett -> Nitter RSS）")
+    logger.info("使用 Fallback 客户端（Syndication -> Vanlett -> Nitter RSS）")
     return FallbackClient()
 
 
