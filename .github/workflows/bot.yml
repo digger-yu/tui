@@ -38,6 +38,24 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+
+    - name: Install system dependencies for Chromium + xvfb
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+          libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+          libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
+          libgtk-3-0 libxshmfence1
+
+    - name: Cache patchright browser
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-patchright-chromium
+
+    - name: Install patchright browser
+      run: python -m patchright install chromium
     
     - name: Run bot
       env:
@@ -69,7 +87,7 @@ jobs:
 
         # 标记 GitHub Actions 环境
         GITHUB_ACTIONS: "true"
-      run: python main.py
+      run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python main.py
     
     - name: Commit processed tweets
       if: always()

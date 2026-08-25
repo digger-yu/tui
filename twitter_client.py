@@ -1,9 +1,10 @@
 """
 X.com (Twitter) 推文获取模块
 支持多种方式获取推文:
-1. Nitter RSS Feed - 免登录，无需API，推荐
-2. Twitter API v2 (官方，需申请开发者账号)
-3. 第三方 Twitter API 代理服务
+1. Vanlett HTML - 免登录，无需API，Nitter 替代方案，推荐
+2. Nitter RSS Feed - 免登录，无需API（Nitter 实例已大多失效）
+3. Twitter API v2 (官方，需申请开发者账号)
+4. 第三方 Twitter API 代理服务
 """
 import logging
 import requests
@@ -233,6 +234,208 @@ class NitterRSSClient:
         )
 
 
+class VanlettClient:
+    """
+    Vanlett HTML 客户端 - 免登录获取 Twitter 推文
+    Vanlett 是 Nitter 的替代前端，通过解析 HTML 页面获取推文
+    注意: Vanlett 不提供 RSS，需解析 HTML；且使用 Cloudflare Turnstile 防护，
+    需通过 patchright（Playwright 反检测补丁）以 headful 浏览器模式绕过验证
+
+    依赖:
+      pip install patchright
+      python -m patchright install chromium
+    Linux 服务器/GitHub Actions 需配合 xvfb 运行 headful 模式:
+      sudo apt-get install -y xvfb
+      xvfb-run python main.py
+    """
+
+    BASE_URL = "https://vanlett.com"
+    # Cloudflare 验证最大等待秒数
+    CF_TIMEOUT = 30
+
+    def __init__(self):
+        self._playwright = None
+        self._browser = None
+
+    def _ensure_browser(self):
+        """懒启动 patchright 浏览器（headful 模式以绕过 Cloudflare 检测）"""
+        if self._browser is not None:
+            return self._browser
+
+        try:
+            from patchright.sync_api import sync_playwright
+        except ImportError:
+            logger.error(
+                "patchright 未安装，无法绕过 Vanlett 的 Cloudflare 验证。"
+                "请运行: pip install patchright && python -m patchright install chromium"
+            )
+            return None
+
+        try:
+            self._playwright = sync_playwright().start()
+            self._browser = self._playwright.chromium.launch(
+                headless=False,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox',
+                    '--disable-gpu',
+                ],
+            )
+            logger.info("patchright 浏览器已启动（headful 模式）")
+        except Exception as e:
+            logger.error(
+                f"启动浏览器失败: {e}。"
+                "Linux 环境请使用 xvfb-run 运行程序。"
+            )
+            self._browser = None
+        return self._browser
+
+    def _fetch_html(self, url: str) -> Optional[str]:
+        """通过浏览器获取页面 HTML，自动等待 Cloudflare 验证完成"""
+        browser = self._ensure_browser()
+        if browser is None:
+            return None
+
+        page = None
+        try:
+            page = browser.new_page()
+            logger.info(f"浏览器导航至: {url}")
+            page.goto(url, timeout=60000, wait_until='domcontentloaded')
+
+            # 等待 Cloudflare Turnstile 验证完成
+            import time
+            for _ in range(self.CF_TIMEOUT // 2):
+                time.sleep(2)
+                title = page.title()
+                if 'just a moment' not in title.lower() and '请稍候' not in title:
+                    break
+
+            # 等待推文元素出现
+            try:
+                page.wait_for_selector('.timeline-item', timeout=15000)
+            except Exception:
+                logger.warning(f"页面未找到推文元素: {url}")
+                return None
+
+            return page.content()
+        except Exception as e:
+            logger.error(f"获取页面 HTML 失败: {e}")
+            return None
+        finally:
+            if page is not None:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+
+    def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
+        """
+        通过 Vanlett HTML 页面获取指定用户的推文
+
+        Args:
+            username: Twitter 用户名 (不含 @)
+            max_results: 最大获取数量
+
+        Returns:
+            List[Tweet]: 推文列表
+        """
+        try:
+            url = f"{self.BASE_URL}/{username}"
+            logger.info(f"通过 Vanlett 获取用户 @{username} 的推文: {url}")
+
+            html = self._fetch_html(url)
+            if not html:
+                return []
+
+            soup = BeautifulSoup(html, 'html.parser')
+            items = soup.select('div.timeline-item')
+
+            if not items:
+                logger.warning(
+                    f"Vanlett 页面未找到推文元素"
+                    f"（用户 @{username} 可能不存在或页面结构已变化）"
+                )
+                return []
+
+            logger.info(f"Vanlett 找到 {len(items)} 条推文")
+
+            tweets = []
+            for item in items[:max_results]:
+                try:
+                    tweet = self._parse_tweet(item, username)
+                    if tweet:
+                        tweets.append(tweet)
+                except Exception as e:
+                    logger.warning(f"解析推文时出错: {e}")
+                    continue
+
+            logger.info(f"成功解析 {len(tweets)} 条推文")
+            return tweets
+
+        except Exception as e:
+            logger.error(f"获取推文时出错: {e}")
+            return []
+
+    def _parse_tweet(self, item, username: str) -> Optional[Tweet]:
+        """解析单个推文 HTML 元素"""
+        # 获取推文内容
+        content_el = item.select_one('.post-content')
+        if not content_el:
+            return None
+
+        text = content_el.get_text()
+        text = ' '.join(text.split())  # 规范化空白字符
+        if not text:
+            return None
+
+        # 获取发布时间（相对时间，如 "8h"、"11h"）
+        date_el = item.select_one('.post-date')
+        created_at = date_el.get_text(strip=True) if date_el else ""
+
+        # 获取媒体链接（排除引用推文中的媒体）
+        media_urls = []
+        for a in item.select('.still-image'):
+            if a.find_parent(class_='quote'):
+                continue
+            href = a.get('href', '')
+            if href:
+                media_urls.append(href)
+
+        # Vanlett 不提供推文 ID，基于内容生成稳定 ID
+        hash_val = hashlib.md5(text.encode()).hexdigest()[:16]
+        tweet_id = f"vanlett_{hash_val}"
+
+        # Vanlett 不提供单条推文链接
+        tweet_url = f"https://x.com/{username}"
+
+        return Tweet(
+            tweet_id=tweet_id,
+            text=text,
+            created_at=created_at,
+            author=username,
+            url=tweet_url,
+            media_urls=media_urls
+        )
+
+    def close(self):
+        """关闭浏览器，释放资源"""
+        if self._browser is not None:
+            try:
+                self._browser.close()
+            except Exception:
+                pass
+            self._browser = None
+        if self._playwright is not None:
+            try:
+                self._playwright.stop()
+            except Exception:
+                pass
+            self._playwright = None
+
+    def __del__(self):
+        self.close()
+
+
 class TwitterAPIClient:
     """Twitter API v2 客户端"""
     
@@ -360,18 +563,19 @@ class TwitterProxyClient:
 def get_twitter_client():
     """
     获取可用的 Twitter 客户端
-    默认使用 Nitter RSS（免登录，无需API）
+    默认使用 Vanlett（Nitter 替代方案，免登录，无需API）
     """
-    logger.info("使用 Nitter RSS 客户端（免登录）")
-    return NitterRSSClient()
+    logger.info("使用 Vanlett 客户端（Nitter 替代方案，免登录）")
+    return VanlettClient()
 
 
 if __name__ == "__main__":
     # 测试代码
     logging.basicConfig(level=logging.INFO)
-    
+
     client = get_twitter_client()
-    tweets = client.get_user_tweets(config.TARGET_TWITTER_USER, max_results=5)
+    test_user = config.ACCOUNTS[0]["twitter_user"] if config.ACCOUNTS else "aleabitoreddit"
+    tweets = client.get_user_tweets(test_user, max_results=5)
     
     for tweet in tweets:
         print(f"\n推文ID: {tweet.tweet_id}")
