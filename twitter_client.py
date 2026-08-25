@@ -251,7 +251,7 @@ class VanlettClient:
 
     BASE_URL = "https://vanlett.com"
     # Cloudflare 验证最大等待秒数
-    CF_TIMEOUT = 30
+    CF_TIMEOUT = 60
 
     def __init__(self):
         self._playwright = None
@@ -271,17 +271,31 @@ class VanlettClient:
             )
             return None
 
+        launch_args = [
+            '--disable-blink-features=AutomationControlled',
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+        ]
+
         try:
             self._playwright = sync_playwright().start()
-            self._browser = self._playwright.chromium.launch(
-                headless=False,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--no-sandbox',
-                    '--disable-gpu',
-                ],
-            )
-            logger.info("patchright 浏览器已启动（headful 模式）")
+            # 优先使用系统安装的 Chrome（真实浏览器更不容易被检测）
+            # GitHub Actions ubuntu-latest 预装了 Google Chrome
+            try:
+                self._browser = self._playwright.chromium.launch(
+                    headless=False,
+                    channel='chrome',
+                    args=launch_args,
+                )
+                logger.info("patchright 浏览器已启动（Chrome headful 模式）")
+            except Exception:
+                # 回退到 patchright 自带的 Chromium
+                self._browser = self._playwright.chromium.launch(
+                    headless=False,
+                    args=launch_args,
+                )
+                logger.info("patchright 浏览器已启动（Chromium headful 模式）")
         except Exception as e:
             logger.error(
                 f"启动浏览器失败: {e}。"
