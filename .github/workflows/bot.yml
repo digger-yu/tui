@@ -71,6 +71,11 @@ jobs:
         TWEETS_COUNT: '1'
         TRANSLATOR_ENGINE: 'google'
 
+        # Twitter API Bearer Token (免费版, 每 15 分钟 1 次读取)
+        # 申请: https://developer.x.com/ → Free 项目
+        # 在 Settings → Secrets 中添加 TWITTER_BEARER_TOKEN
+        TWITTER_BEARER_TOKEN: ${{ secrets.TWITTER_BEARER_TOKEN }}
+
         # 标记 GitHub Actions 环境
         GITHUB_ACTIONS: "true"
       run: python main.py

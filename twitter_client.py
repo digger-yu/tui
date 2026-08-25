@@ -670,15 +670,23 @@ class SyndicationClient:
 class FallbackClient:
     """
     组合客户端 - 按优先级尝试多个数据源
-    1. Syndication API (最稳定，无需认证，CI/本地均可)
-    2. Vanlett (本地桌面可绕 Cloudflare，CI 不可用)
-    3. Nitter RSS (实例大多已失效，最后兜底)
+    CI 环境: Twitter API (需 Bearer Token) -> Syndication -> Nitter
+    本地环境: Syndication -> Vanlett -> Nitter
     """
 
     def __init__(self):
+        self._twitter_api = None
         self._syndication = None
         self._vanlett = None
         self._nitter = None
+        import os
+        self._is_ci = os.getenv("GITHUB_ACTIONS") == "true"
+        self._has_bearer = bool(getattr(config, "TWITTER_BEARER_TOKEN", ""))
+
+    def _get_twitter_api(self):
+        if self._twitter_api is None:
+            self._twitter_api = TwitterAPIClient(config.TWITTER_BEARER_TOKEN)
+        return self._twitter_api
 
     def _get_syndication(self):
         if self._syndication is None:
@@ -696,19 +704,30 @@ class FallbackClient:
         return self._nitter
 
     def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
-        # 1. 优先用 syndication API（最稳定）
-        try:
-            client = self._get_syndication()
-            tweets = client.get_user_tweets(username, max_results)
-            if tweets:
-                return tweets
-            logger.info("syndication 未获取到推文，尝试 Vanlett")
-        except Exception as e:
-            logger.warning(f"syndication 失败，尝试 Vanlett: {e}")
+        # CI 优先用官方 API（如果配置了 Bearer Token）
+        if self._is_ci and self._has_bearer:
+            try:
+                client = self._get_twitter_api()
+                tweets = client.get_user_tweets(username, max_results)
+                if tweets:
+                    return tweets
+                logger.info("Twitter API 未获取到推文，尝试 syndication")
+            except Exception as e:
+                logger.warning(f"Twitter API 失败，尝试 syndication: {e}")
 
-        # 2. 尝试 Vanlett（本地可用，CI 会超时）
-        import os
-        if os.getenv("GITHUB_ACTIONS") != "true":
+        # Syndication API（CI 上可能被 429，本地可用）
+        if not self._is_ci or not self._has_bearer:
+            try:
+                client = self._get_syndication()
+                tweets = client.get_user_tweets(username, max_results)
+                if tweets:
+                    return tweets
+                logger.info("syndication 未获取到推文")
+            except Exception as e:
+                logger.warning(f"syndication 失败: {e}")
+
+        # Vanlett（仅本地，CI 跳过避免 Cloudflare 超时）
+        if not self._is_ci:
             try:
                 client = self._get_vanlett()
                 tweets = client.get_user_tweets(username, max_results)
@@ -718,7 +737,7 @@ class FallbackClient:
             except Exception as e:
                 logger.warning(f"Vanlett 失败，回退到 Nitter RSS: {e}")
 
-        # 3. 最后兜底 Nitter RSS
+        # Nitter RSS（最后兜底）
         try:
             client = self._get_nitter()
             tweets = client.get_user_tweets(username, max_results)
@@ -738,9 +757,10 @@ class FallbackClient:
 def get_twitter_client():
     """
     获取可用的 Twitter 客户端
-    使用 FallbackClient: Syndication -> Vanlett -> Nitter RSS
+    CI: Twitter API (Bearer Token) -> Syndication -> Nitter
+    本地: Syndication -> Vanlett -> Nitter
     """
-    logger.info("使用 Fallback 客户端（Syndication -> Vanlett -> Nitter RSS）")
+    logger.info("使用 Fallback 客户端")
     return FallbackClient()
 
 

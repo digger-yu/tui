@@ -43,6 +43,11 @@ BAIDU_APP_ID = os.getenv("BAIDU_APP_ID", "")
 BAIDU_SECRET_KEY = os.getenv("BAIDU_SECRET_KEY", "")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
 
+# ==================== Twitter API 配置 ====================
+# 官方 API Bearer Token (免费版: 每 15 分钟 1 次读取)
+# 申请: https://developer.x.com/ → Free 项目 → Bearer Token
+TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN", "")
+
 # ==================== 程序配置 ====================
 TWEETS_COUNT = int(os.getenv("TWEETS_COUNT", "10"))
 POLLING_INTERVAL = int(os.getenv("POLLING_INTERVAL", "300"))
