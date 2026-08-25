@@ -574,13 +574,70 @@ class TwitterProxyClient:
             return []
 
 
+class FallbackClient:
+    """
+    组合客户端 - 先尝试 Vanlett，失败后回退到 Nitter RSS
+    Vanlett 在本地桌面环境可绕过 Cloudflare，但在 CI 数据中心 IP 上可能失败；
+    Nitter RSS 在 CI 上更稳定（纯 HTTP，无 Cloudflare 防护）
+    """
+
+    def __init__(self):
+        self._vanlett = None
+        self._nitter = None
+        # CI 环境直接用 Nitter（Vanlett 的 Cloudflare 验证在数据中心 IP 上无法通过）
+        import os
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            self._primary = "nitter"
+            logger.info("检测到 CI 环境，优先使用 Nitter RSS")
+        else:
+            self._primary = "vanlett"
+
+    def _get_vanlett(self):
+        if self._vanlett is None:
+            self._vanlett = VanlettClient()
+        return self._vanlett
+
+    def _get_nitter(self):
+        if self._nitter is None:
+            self._nitter = NitterRSSClient()
+        return self._nitter
+
+    def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
+        # 先尝试 Vanlett
+        if self._primary == "vanlett":
+            try:
+                client = self._get_vanlett()
+                tweets = client.get_user_tweets(username, max_results)
+                if tweets:
+                    return tweets
+                logger.info("Vanlett 未获取到推文，回退到 Nitter RSS")
+            except Exception as e:
+                logger.warning(f"Vanlett 失败，回退到 Nitter RSS: {e}")
+
+        # 回退到 Nitter RSS
+        try:
+            client = self._get_nitter()
+            tweets = client.get_user_tweets(username, max_results)
+            if tweets:
+                return tweets
+            logger.warning("Nitter RSS 也未获取到推文")
+        except Exception as e:
+            logger.error(f"Nitter RSS 也失败: {e}")
+
+        return []
+
+    def close(self):
+        if self._vanlett is not None:
+            self._vanlett.close()
+
+
 def get_twitter_client():
     """
     获取可用的 Twitter 客户端
-    默认使用 Vanlett（Nitter 替代方案，免登录，无需API）
+    使用 FallbackClient: 先 Vanlett（本地优先），失败回退 Nitter RSS（CI 优先）
     """
-    logger.info("使用 Vanlett 客户端（Nitter 替代方案，免登录）")
-    return VanlettClient()
+    logger.info("使用 Fallback 客户端（Vanlett -> Nitter RSS）")
+    return FallbackClient()
 
 
 if __name__ == "__main__":
