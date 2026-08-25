@@ -588,12 +588,24 @@ class SyndicationClient:
         url = f"{self.BASE_URL}/{username}"
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                          "AppleWebKit/537.36",
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/131.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml",
+            "Accept-Language": "en-US,en;q=0.9",
         }
 
         try:
             logger.info(f"通过 syndication API 获取用户 @{username} 的推文")
             resp = requests.get(url, headers=headers, timeout=15)
+
+            if resp.status_code == 429:
+                retry_after = resp.headers.get("Retry-After", "?")
+                logger.warning(
+                    f"syndication API 限流 (429), "
+                    f"Retry-After: {retry_after}: @{username}"
+                )
+                return []
+
             resp.raise_for_status()
 
             import re
@@ -648,10 +660,7 @@ class SyndicationClient:
             return tweets
 
         except requests.exceptions.HTTPError as e:
-            if resp.status_code == 429:
-                logger.warning(f"syndication API 限流 (429): @{username}")
-            else:
-                logger.error(f"syndication API 请求失败: {e}")
+            logger.error(f"syndication API 请求失败: {e}")
             return []
         except Exception as e:
             logger.error(f"syndication API 请求失败: {e}")
