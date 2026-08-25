@@ -199,13 +199,23 @@ class TwitterToFeishuBot:
         logger.info("=" * 50)
         logger.info("Twitter to Feishu Bot - 单次运行")
         logger.info("=" * 50)
-        
+
         try:
             self.process_all_accounts()
         except Exception as e:
             logger.error(f"运行出错: {e}")
-        
+        finally:
+            self._cleanup()
+
         logger.info("单次运行完成")
+
+    def _cleanup(self):
+        """释放资源（关闭浏览器等）"""
+        if hasattr(self.twitter_client, 'close'):
+            try:
+                self.twitter_client.close()
+            except Exception as e:
+                logger.warning(f"关闭客户端时出错: {e}")
     
     def run_continuously(self):
         """持续运行，定时检查"""
