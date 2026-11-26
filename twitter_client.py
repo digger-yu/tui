@@ -7,7 +7,10 @@ X.com (Twitter) 推文获取模块
 4. Twitter API v2 (官方，需申请开发者账号)
 5. 第三方 Twitter API 代理服务
 """
+import re
+import sys
 import logging
+import subprocess
 import requests
 import hashlib
 from typing import List, Dict, Optional
@@ -15,6 +18,10 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 import config
+
+# Windows: 隐藏 subprocess 控制台窗口（定时任务静默运行）
+# Linux/GitHub Actions: 无此标志，设为 0
+_SUBPROCESS_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
 
 logger = logging.getLogger(__name__)
 
@@ -54,204 +61,164 @@ class Tweet:
 
 class NitterRSSClient:
     """
-    Nitter RSS Feed 客户端 - 免登录获取 Twitter 推文
-    Nitter 提供 RSS feed，无需登录即可获取公开推文
+    Nitter HTML 客户端 - 通过 curl subprocess 获取 HTML 并解析推文
+    RSS feed 已被大多数实例关闭，但 HTML 页面仍然可用
+    使用 curl subprocess 绕过 Python TLS 指纹被检测的问题
     """
-    
-    # Nitter 实例列表（部分可能会失效，会自动尝试下一个）
-    # 来源: https://github.com/zedeus/nitter/wiki/Instances
+
     NITTER_INSTANCES = [
+        "https://nitter.tiekoetter.com",
         "https://nitter.net",
         "https://xcancel.com",
         "https://nitter.poast.org",
         "https://nitter.privacyredirect.com",
-        "https://nitter.tiekoetter.com",
         "https://nitter.space",
         "https://nitter.catsarch.com",
         "https://nitter.kareem.one",
         "https://lightbrd.com",
         "https://nuku.trabun.org",
     ]
-    
+
     def __init__(self, instance: str = None):
-        self.instance = instance or self.NITTER_INSTANCES[0]
-        self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/rss+xml,application/xml,text/xml,*/*",
-            "Accept-Language": "en-US,en;q=0.5",
-        })
-    
-    def _try_instances(self, username: str) -> Optional[str]:
-        """尝试多个 Nitter 实例，返回成功的 RSS XML"""
+        self.instance = instance
+
+    def _fetch_html(self, url: str) -> Optional[str]:
+        """通过 curl subprocess 获取 HTML（不发送 User-Agent 以避免触发反爬检测）"""
+        import os, subprocess, shutil
+
+        cmd = ['curl', '-s', '-m', '15', '--compressed']
+
+        proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or \
+                os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+        if proxy:
+            cmd.extend(['-x', proxy])
+
+        cmd.append(url)
+
+        if shutil.which('curl') is None and shutil.which('curl.exe'):
+            cmd[0] = 'curl.exe'
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=20,
+                                     creationflags=_SUBPROCESS_FLAGS)
+            return result.stdout.decode('utf-8', errors='replace')
+        except Exception as e:
+            logger.error(f"curl 请求失败: {e}")
+            return None
+
+    def _try_instances(self, username: str) -> Optional[tuple]:
+        """尝试多个 Nitter 实例，返回 (instance, html)"""
         import time
-        
+
         for i, instance in enumerate(self.NITTER_INSTANCES):
-            try:
-                # 在实例之间添加延迟，避免 429 Too Many Requests
-                if i > 0:
-                    time.sleep(3)
-                
-                # xcancel.com 使用不同的 RSS URL 格式
-                if "xcancel.com" in instance:
-                    url = f"{instance}/{username}/rss"
-                else:
-                    url = f"{instance}/{username}/rss"
-                
-                logger.info(f"尝试 Nitter RSS: {instance}")
-                
-                response = self.session.get(url, timeout=20)
-                
-                # 检查是否成功获取到 RSS
-                if response.status_code == 200 and len(response.text) > 500:
-                    # 验证是否是有效的 RSS
-                    if '<rss' in response.text and '<item>' in response.text:
-                        logger.info(f"成功使用 Nitter 实例: {instance}")
-                        self.instance = instance
-                        return response.text
-                    else:
-                        logger.warning(f"实例 {instance} 返回了非 RSS 内容 (前200字符: {response.text[:200]})")
-                else:
-                    logger.warning(f"实例 {instance} 未返回有效数据 (status={response.status_code}, len={len(response.text)})")
-                    
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"实例 {instance} 请求失败: {e}")
-                continue
-        
+            if i > 0:
+                time.sleep(2)
+
+            url = f"{instance}/{username}"
+            logger.info(f"尝试 Nitter: {instance}")
+
+            html = self._fetch_html(url)
+            if html and len(html) > 500 and 'tweet-content' in html:
+                logger.info(f"成功使用 Nitter 实例: {instance}")
+                self.instance = instance
+                return (instance, html)
+            elif html and len(html) > 500:
+                logger.warning(f"实例 {instance} 返回了非推文内容 (len={len(html)})")
+            else:
+                logger.warning(f"实例 {instance} 未返回有效数据 (len={len(html) if html else 0})")
+
         logger.error("所有 Nitter 实例都不可用")
         return None
-    
+
     def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
-        """
-        通过 Nitter RSS 获取指定用户的推文
-        
-        Args:
-            username: Twitter 用户名 (不含 @)
-            max_results: 最大获取数量
-        
-        Returns:
-            List[Tweet]: 推文列表
-        """
+        """通过 Nitter HTML 页面获取指定用户的推文"""
         try:
-            # 尝试获取 RSS 内容
-            xml_content = self._try_instances(username)
-            if not xml_content:
+            result = self._try_instances(username)
+            if not result:
                 return []
-            
-            # 解析 RSS XML
-            root = ET.fromstring(xml_content)
-            
-            # 查找所有 item 元素
-            items = root.findall('.//item')
-            
-            if not items:
-                logger.warning(f"未找到用户 {username} 的推文")
-                return []
-            
-            logger.info(f"找到 {len(items)} 条推文")
-            
-            # 解析每条推文
+
+            instance, html = result
+            soup = BeautifulSoup(html, 'html.parser')
+
+            bodies = soup.find_all('div', class_='tweet-body')
+            logger.info(f"找到 {len(bodies)} 条推文")
+
             tweets = []
-            for item in items[:max_results]:
-                try:
-                    tweet = self._parse_rss_item(item, username)
-                    if tweet:
-                        tweets.append(tweet)
-                except Exception as e:
-                    logger.warning(f"解析推文时出错: {e}")
-                    continue
-            
+            for body in bodies[:max_results]:
+                tweet = self._parse_html_item(body, username, instance)
+                if tweet:
+                    tweets.append(tweet)
+
             logger.info(f"成功解析 {len(tweets)} 条推文")
             return tweets
-            
-        except ET.ParseError as e:
-            logger.error(f"解析 RSS XML 失败: {e}")
-            return []
+
         except Exception as e:
             logger.error(f"获取推文时出错: {e}")
             return []
-    
-    def _parse_rss_item(self, item, username: str) -> Optional[Tweet]:
-        """解析单个 RSS item"""
-        # 获取标题/内容
-        title_el = item.find('title')
-        text = title_el.text if title_el is not None else ""
-        
+
+    def _parse_html_item(self, body, username: str, instance: str) -> Optional[Tweet]:
+        """解析单个 tweet-body HTML 元素"""
+        # 推文文本
+        content = body.find('div', class_='tweet-content')
+        text = content.get_text(strip=True) if content else ""
         if not text:
             return None
-        
-        # 获取链接
-        link_el = item.find('link')
-        tweet_url = link_el.text if link_el is not None else ""
-        
-        # 从链接提取推文ID
+
+        # 推文 ID 从链接提取
+        link = body.find('a', href=re.compile(r'/status/'))
         tweet_id = ""
-        if tweet_url:
-            import re
-            match = re.search(r'/status/(\d+)', tweet_url)
-            if match:
-                tweet_id = match.group(1)
-        
+        tweet_url = ""
+        if link:
+            href = link.get('href', '')
+            m = re.search(r'/status/(\d+)', href)
+            if m:
+                tweet_id = m.group(1)
+                tweet_url = f"https://x.com/{username}/status/{tweet_id}"
+
         if not tweet_id:
-            # 基于内容生成ID
             hash_val = hashlib.md5(text.encode()).hexdigest()[:16]
-            tweet_id = f"rss_{hash_val}"
-        
-        # 获取发布时间
-        pub_date_el = item.find('pubDate')
-        created_at = pub_date_el.text if pub_date_el is not None else ""
-        
-        # 获取描述（可能包含 HTML 格式的完整内容）
-        desc_el = item.find('description')
-        description = ""
-        if desc_el is not None and desc_el.text:
-            description = desc_el.text
-            # 如果描述比标题更完整，使用描述
-            if len(description) > len(text):
-                # 去除 HTML 标签
-                soup = BeautifulSoup(description, 'html.parser')
-                clean_text = soup.get_text(strip=True)
-                if len(clean_text) > len(text):
-                    text = clean_text
-        
-        # 获取媒体链接
+            tweet_id = f"nitter_{hash_val}"
+
+        # 日期
+        date_span = body.find('span', class_='tweet-date')
+        created_at = ""
+        if date_span:
+            a = date_span.find('a')
+            if a:
+                created_at = a.get('title', a.get_text())
+
+        # 媒体
         media_urls = []
-        # 从 description 中提取图片
-        if desc_el is not None and desc_el.text:
-            soup = BeautifulSoup(desc_el.text, 'html.parser')
-            images = soup.find_all('img')
-            for img in images:
-                src = img.get('src', '')
-                if src:
-                    media_urls.append(src)
-        
+        for img in body.find_all('a', class_='still-image'):
+            href = img.get('href', '')
+            if href and not href.startswith('http'):
+                href = f"https://pbs.twimg.com{href}" if href.startswith('/') else href
+            if href:
+                media_urls.append(href)
+
         return Tweet(
             tweet_id=tweet_id,
             text=text,
             created_at=created_at,
             author=username,
             url=tweet_url,
-            media_urls=media_urls
+            media_urls=media_urls,
         )
 
 
-class VanlettClient:
+class BrowserClient:
     """
-    Vanlett HTML 客户端 - 免登录获取 Twitter 推文
-    Vanlett 是 Nitter 的替代前端，通过解析 HTML 页面获取推文
-    注意: Vanlett 不提供 RSS，需解析 HTML；且使用 Cloudflare Turnstile 防护，
-    需通过 patchright（Playwright 反检测补丁）以 headful 浏览器模式绕过验证
+    浏览器 HTML 客户端 - 用 patchright 浏览器获取推文
+    可访问 Vanlett 或 Nitter 实例（均需 JS 验证）
+    headful 模式以绕过 Cloudflare/反爬检测
 
     依赖:
       pip install patchright
       python -m patchright install chromium
-    Linux 服务器/GitHub Actions 需配合 xvfb 运行 headful 模式:
-      sudo apt-get install -y xvfb
-      xvfb-run python main.py
     """
 
     BASE_URL = "https://vanlett.com"
-    # Cloudflare 验证最大等待秒数
+    NITTER_URL = "https://nitter.tiekoetter.com"
     CF_TIMEOUT = 60
 
     def __init__(self):
@@ -277,7 +244,33 @@ class VanlettClient:
             '--no-sandbox',
             '--disable-gpu',
             '--disable-dev-shm-usage',
+            '--disable-quic',
+            '--disable-http2',
+            '--ignore-certificate-errors',
         ]
+
+        # 检测系统代理（本地环境可能需要代理访问 vanlett.com）
+        import os
+        proxy_server = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or \
+                       os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+        # WinHTTP 代理（SYSTEM 用户环境下 requests 库不自动读取）
+        if not proxy_server:
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['netsh', 'winhttp', 'show', 'proxy'],
+                    capture_output=True, text=True, timeout=5,
+                    creationflags=_SUBPROCESS_FLAGS,
+                )
+                m = re.search(r'Proxy Server\(s\)\s*:\s*http=([^;]+)', result.stdout)
+                if m:
+                    proxy_server = f"http://{m.group(1)}"
+            except Exception:
+                pass
+
+        if proxy_server:
+            launch_args.append(f'--proxy-server={proxy_server}')
+            logger.info(f"浏览器使用代理: {proxy_server}")
 
         try:
             self._playwright = sync_playwright().start()
@@ -317,17 +310,21 @@ class VanlettClient:
             logger.info(f"浏览器导航至: {url}")
             page.goto(url, timeout=60000, wait_until='domcontentloaded')
 
-            # 等待 Cloudflare Turnstile 验证完成
+            # 等待 Cloudflare/反爬验证完成
             import time
             for _ in range(self.CF_TIMEOUT // 2):
                 time.sleep(2)
                 title = page.title()
-                if 'just a moment' not in title.lower() and '请稍候' not in title:
+                if 'just a moment' not in title.lower() and \
+                   '请稍候' not in title and \
+                   'not a bot' not in title.lower():
                     break
 
             # 等待推文元素出现
             try:
-                page.wait_for_selector('.timeline-item', timeout=15000)
+                page.wait_for_selector(
+                    '.timeline-item, .tweet-body', timeout=15000
+                )
             except Exception:
                 logger.warning(f"页面未找到推文元素: {url}")
                 return None
@@ -344,70 +341,102 @@ class VanlettClient:
                     pass
 
     def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
-        """
-        通过 Vanlett HTML 页面获取指定用户的推文
-
-        Args:
-            username: Twitter 用户名 (不含 @)
-            max_results: 最大获取数量
-
-        Returns:
-            List[Tweet]: 推文列表
-        """
-        try:
-            url = f"{self.BASE_URL}/{username}"
-            logger.info(f"通过 Vanlett 获取用户 @{username} 的推文: {url}")
+        """通过浏览器获取推文，先试 Nitter，再试 Vanlett"""
+        for source_name, base_url, selector, parser in [
+            ("Nitter", self.NITTER_URL, 'div.tweet-body', self._parse_nitter_item),
+            ("Vanlett", self.BASE_URL, 'div.timeline-item', self._parse_vanlett_item),
+        ]:
+            url = f"{base_url}/{username}"
+            logger.info(f"通过 {source_name} 获取用户 @{username} 的推文: {url}")
 
             html = self._fetch_html(url)
             if not html:
-                return []
+                continue
 
             soup = BeautifulSoup(html, 'html.parser')
-            items = soup.select('div.timeline-item')
+            items = soup.select(selector)
 
             if not items:
-                logger.warning(
-                    f"Vanlett 页面未找到推文元素"
-                    f"（用户 @{username} 可能不存在或页面结构已变化）"
-                )
-                return []
+                logger.warning(f"{source_name} 页面未找到推文元素")
+                continue
 
-            logger.info(f"Vanlett 找到 {len(items)} 条推文")
+            logger.info(f"{source_name} 找到 {len(items)} 条推文")
 
             tweets = []
             for item in items[:max_results]:
                 try:
-                    tweet = self._parse_tweet(item, username)
+                    tweet = parser(item, username)
                     if tweet:
                         tweets.append(tweet)
                 except Exception as e:
                     logger.warning(f"解析推文时出错: {e}")
                     continue
 
-            logger.info(f"成功解析 {len(tweets)} 条推文")
-            return tweets
+            if tweets:
+                logger.info(f"{source_name} 成功解析 {len(tweets)} 条推文")
+                return tweets
 
-        except Exception as e:
-            logger.error(f"获取推文时出错: {e}")
-            return []
+        return []
 
-    def _parse_tweet(self, item, username: str) -> Optional[Tweet]:
-        """解析单个推文 HTML 元素"""
-        # 获取推文内容
+    def _parse_nitter_item(self, body, username: str) -> Optional[Tweet]:
+        """解析 Nitter tweet-body HTML 元素"""
+        content = body.find('div', class_='tweet-content')
+        text = content.get_text(strip=True) if content else ""
+        if not text:
+            return None
+
+        link = body.find('a', href=re.compile(r'/status/'))
+        tweet_id = ""
+        tweet_url = ""
+        if link:
+            href = link.get('href', '')
+            m = re.search(r'/status/(\d+)', href)
+            if m:
+                tweet_id = m.group(1)
+                tweet_url = f"https://x.com/{username}/status/{tweet_id}"
+
+        if not tweet_id:
+            hash_val = hashlib.md5(text.encode()).hexdigest()[:16]
+            tweet_id = f"nitter_{hash_val}"
+
+        date_span = body.find('span', class_='tweet-date')
+        created_at = ""
+        if date_span:
+            a = date_span.find('a')
+            if a:
+                created_at = a.get('title', a.get_text())
+
+        media_urls = []
+        for img in body.find_all('a', class_='still-image'):
+            href = img.get('href', '')
+            if href and not href.startswith('http'):
+                href = f"https://pbs.twimg.com{href}" if href.startswith('/') else href
+            if href:
+                media_urls.append(href)
+
+        return Tweet(
+            tweet_id=tweet_id,
+            text=text,
+            created_at=created_at,
+            author=username,
+            url=tweet_url,
+            media_urls=media_urls,
+        )
+
+    def _parse_vanlett_item(self, item, username: str) -> Optional[Tweet]:
+        """解析 Vanlett timeline-item HTML 元素"""
         content_el = item.select_one('.post-content')
         if not content_el:
             return None
 
         text = content_el.get_text()
-        text = ' '.join(text.split())  # 规范化空白字符
+        text = ' '.join(text.split())
         if not text:
             return None
 
-        # 获取发布时间（相对时间，如 "8h"、"11h"）
         date_el = item.select_one('.post-date')
         created_at = date_el.get_text(strip=True) if date_el else ""
 
-        # 获取媒体链接（排除引用推文中的媒体）
         media_urls = []
         for a in item.select('.still-image'):
             if a.find_parent(class_='quote'):
@@ -416,7 +445,6 @@ class VanlettClient:
             if href:
                 media_urls.append(href)
 
-        # Vanlett 不提供推文 ID，基于内容生成稳定 ID
         hash_val = hashlib.md5(text.encode()).hexdigest()[:16]
         tweet_id = f"vanlett_{hash_val}"
 
@@ -579,42 +607,60 @@ class SyndicationClient:
     """
     Twitter 官方 syndication API 客户端
     无需认证，返回用户最近 ~20 条推文
-    该端点为嵌入式推文卡片提供服务，非常稳定
+    使用 curl subprocess 绕过 Python TLS 指纹被 Twitter 识别的问题
     """
 
     BASE_URL = "https://syndication.twitter.com/srv/timeline-profile/screen-name"
 
+    def _fetch_html(self, url: str) -> Optional[str]:
+        """通过 curl subprocess 获取 HTML（绕过 Python TLS 指纹检测）"""
+        import os, subprocess, shutil
+
+        cmd = ['curl', '-s', '-m', '15', '--compressed', '-A',
+               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+               'AppleWebKit/537.36 (KHTML, like Gecko) '
+               'Chrome/131.0.0.0 Safari/537.36']
+
+        proxy = os.getenv("HTTPS_PROXY") or os.getenv("https_proxy") or \
+                os.getenv("HTTP_PROXY") or os.getenv("http_proxy")
+        if proxy:
+            cmd.extend(['-x', proxy])
+
+        cmd.append(url)
+
+        # Windows: curl.exe
+        if shutil.which('curl') is None and shutil.which('curl.exe'):
+            cmd[0] = 'curl.exe'
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=20,
+                                     creationflags=_SUBPROCESS_FLAGS)
+            return result.stdout.decode('utf-8', errors='replace')
+        except Exception as e:
+            logger.error(f"curl 请求失败: {e}")
+            return None
+
     def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
         url = f"{self.BASE_URL}/{username}"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/131.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
 
         try:
             logger.info(f"通过 syndication API 获取用户 @{username} 的推文")
-            resp = requests.get(url, headers=headers, timeout=15)
+            html = self._fetch_html(url)
 
-            if resp.status_code == 429:
-                retry_after = resp.headers.get("Retry-After", "?")
-                logger.warning(
-                    f"syndication API 限流 (429), "
-                    f"Retry-After: {retry_after}: @{username}"
-                )
+            if not html:
+                logger.warning(f"syndication API 返回空响应: @{username}")
                 return []
-
-            resp.raise_for_status()
 
             import re
             m = re.search(
                 r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-                resp.text, re.DOTALL,
+                html, re.DOTALL,
             )
             if not m:
-                logger.warning(f"syndication 响应中未找到 __NEXT_DATA__: @{username}")
+                if 'Rate limit exceeded' in html:
+                    logger.warning(f"syndication API 限流 (429): @{username}")
+                else:
+                    logger.warning(f"syndication 响应中未找到 __NEXT_DATA__: @{username}")
                 return []
 
             import json
@@ -659,9 +705,6 @@ class SyndicationClient:
             logger.info(f"成功获取 {len(tweets)} 条推文")
             return tweets
 
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"syndication API 请求失败: {e}")
-            return []
         except Exception as e:
             logger.error(f"syndication API 请求失败: {e}")
             return []
@@ -670,14 +713,14 @@ class SyndicationClient:
 class FallbackClient:
     """
     组合客户端 - 按优先级尝试多个数据源
-    CI 环境: Twitter API (需 Bearer Token) -> Syndication -> Nitter
-    本地环境: Syndication -> Vanlett -> Nitter
+    Nitter HTML (curl) -> Syndication (curl) -> Browser (本地)
+    -> Twitter API (CI, 付费)
     """
 
     def __init__(self):
         self._twitter_api = None
         self._syndication = None
-        self._vanlett = None
+        self._browser = None
         self._nitter = None
         import os
         self._is_ci = os.getenv("GITHUB_ACTIONS") == "true"
@@ -693,10 +736,10 @@ class FallbackClient:
             self._syndication = SyndicationClient()
         return self._syndication
 
-    def _get_vanlett(self):
-        if self._vanlett is None:
-            self._vanlett = VanlettClient()
-        return self._vanlett
+    def _get_browser(self):
+        if self._browser is None:
+            self._browser = BrowserClient()
+        return self._browser
 
     def _get_nitter(self):
         if self._nitter is None:
@@ -704,54 +747,53 @@ class FallbackClient:
         return self._nitter
 
     def get_user_tweets(self, username: str, max_results: int = 10) -> List[Tweet]:
-        # CI 优先用官方 API（如果配置了 Bearer Token）
-        if self._is_ci and self._has_bearer:
-            try:
-                client = self._get_twitter_api()
-                tweets = client.get_user_tweets(username, max_results)
-                if tweets:
-                    return tweets
-                logger.info("Twitter API 未获取到推文，尝试 syndication")
-            except Exception as e:
-                logger.warning(f"Twitter API 失败，尝试 syndication: {e}")
-
-        # Syndication API（CI 上可能被 429，本地可用）
-        if not self._is_ci or not self._has_bearer:
-            try:
-                client = self._get_syndication()
-                tweets = client.get_user_tweets(username, max_results)
-                if tweets:
-                    return tweets
-                logger.info("syndication 未获取到推文")
-            except Exception as e:
-                logger.warning(f"syndication 失败: {e}")
-
-        # Vanlett（仅本地，CI 跳过避免 Cloudflare 超时）
-        if not self._is_ci:
-            try:
-                client = self._get_vanlett()
-                tweets = client.get_user_tweets(username, max_results)
-                if tweets:
-                    return tweets
-                logger.info("Vanlett 未获取到推文，回退到 Nitter RSS")
-            except Exception as e:
-                logger.warning(f"Vanlett 失败，回退到 Nitter RSS: {e}")
-
-        # Nitter RSS（最后兜底）
+        # 1. Nitter HTML (curl, 返回最新推文)
         try:
             client = self._get_nitter()
             tweets = client.get_user_tweets(username, max_results)
             if tweets:
                 return tweets
-            logger.warning("Nitter RSS 也未获取到推文")
+            logger.info("Nitter 未获取到推文")
         except Exception as e:
-            logger.error(f"Nitter RSS 也失败: {e}")
+            logger.warning(f"Nitter 失败: {e}")
+
+        # 2. Syndication API (curl, 可能返回旧推文)
+        try:
+            client = self._get_syndication()
+            tweets = client.get_user_tweets(username, max_results)
+            if tweets:
+                return tweets
+            logger.info("syndication 未获取到推文")
+        except Exception as e:
+            logger.warning(f"syndication 失败: {e}")
+
+        # 3. Browser (本地浏览器, 仅非 CI)
+        if not self._is_ci:
+            try:
+                client = self._get_browser()
+                tweets = client.get_user_tweets(username, max_results)
+                if tweets:
+                    return tweets
+                logger.info("Browser 未获取到推文")
+            except Exception as e:
+                logger.warning(f"Browser 失败: {e}")
+
+        # 4. Twitter API (CI, 需 Bearer Token)
+        if self._has_bearer:
+            try:
+                client = self._get_twitter_api()
+                tweets = client.get_user_tweets(username, max_results)
+                if tweets:
+                    return tweets
+                logger.info("Twitter API 未获取到推文")
+            except Exception as e:
+                logger.warning(f"Twitter API 失败: {e}")
 
         return []
 
     def close(self):
-        if self._vanlett is not None:
-            self._vanlett.close()
+        if self._browser is not None:
+            self._browser.close()
 
 
 def get_twitter_client():
@@ -766,6 +808,8 @@ def get_twitter_client():
 
 if __name__ == "__main__":
     # 测试代码
+    from dotenv import load_dotenv
+    load_dotenv()
     logging.basicConfig(level=logging.INFO)
 
     client = get_twitter_client()
