@@ -69,7 +69,7 @@ jobs:
 
         # 可选配置
         TWEETS_COUNT: '1'
-        TRANSLATOR_ENGINE: 'google'
+        TRANSLATOR_ENGINE: 'auto'
 
         # Twitter API Bearer Token (免费版, 每 15 分钟 1 次读取)
         # 申请: https://developer.x.com/ → Free 项目

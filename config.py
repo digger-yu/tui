@@ -38,10 +38,14 @@ FEISHU_WEBHOOK_URL = os.getenv("FEISHU_WEBHOOK_URL", "")
 FEISHU_WEBHOOK_SECRET = os.getenv("FEISHU_WEBHOOK_SECRET", "")
 
 # ==================== 翻译配置 ====================
-TRANSLATOR_ENGINE = os.getenv("TRANSLATOR_ENGINE", "google")
+# TRANSLATOR_ENGINE: auto (默认，自动按 google → mymemory → 已配置的 baidu/deepl 降级)
+#                    也可指定 google / mymemory / baidu / deepl 作为优先引擎
+TRANSLATOR_ENGINE = os.getenv("TRANSLATOR_ENGINE", "auto")
 BAIDU_APP_ID = os.getenv("BAIDU_APP_ID", "")
 BAIDU_SECRET_KEY = os.getenv("BAIDU_SECRET_KEY", "")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
+# 可选：MyMemory 注册邮箱，可提高每日免费额度
+MYMEMORY_EMAIL = os.getenv("MYMEMORY_EMAIL", "")
 
 # ==================== Twitter API 配置 ====================
 # 官方 API Bearer Token (免费版: 每 15 分钟 1 次读取)

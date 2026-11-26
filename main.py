@@ -36,12 +36,13 @@ from feishu_client import get_feishu_client, FeishuClient, FeishuWebhookClient
 from storage import TweetStorage
 
 # 配置日志
+_log_file = os.getenv("BOT_LOG_FILE", "bot.log")
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('bot.log', encoding='utf-8')
+        logging.FileHandler(_log_file, encoding='utf-8')
     ]
 )
 logger = logging.getLogger(__name__)
@@ -132,10 +133,15 @@ class TwitterToFeishuBot:
         translated = translation["translated"]
         
         logger.info(f"原文: {original[:100]}...")
-        logger.info(f"译文: {translated[:100]}...")
-        
+        translated_ok = translation.get("ok", translated != original)
+        if translated_ok:
+            logger.info(f"译文[{translation.get('engine')}]: {translated[:100]}...")
+        else:
+            logger.warning("翻译失败，本次只推送原文")
+
         # 2. 构建消息内容
-        message_content = self._build_message(tweet, original, translated)
+        message_content = self._build_message(tweet, original,
+                                              translated if translated_ok else "")
         
         # 3. 根据发送方式发送消息
         if self.use_webhook:
@@ -179,12 +185,18 @@ class TwitterToFeishuBot:
 
 📄 原文:
 {original}
+"""
 
+        # 翻译失败时不要把英文原文重复贴一遍
+        if translated and translated != original:
+            message += f"""
 ━━━━━━━━━━━━━━
 
 🇨🇳 中文翻译:
 {translated}
 """
+        else:
+            message += "\n⚠️ 本次自动翻译失败，仅推送原文\n"
         
         # 如果有媒体，添加媒体链接
         if tweet.media_urls:
@@ -323,6 +335,15 @@ def check_config():
 
 def main():
     """主函数"""
+    # 非交互模式: python main.py --once
+    if "--once" in sys.argv:
+        logger.info("本地单次运行模式")
+        if not check_config():
+            sys.exit(1)
+        bot = TwitterToFeishuBot()
+        bot.run_once()
+        return
+
     # 检查是否是 GitHub Actions 环境
     if os.getenv("GITHUB_ACTIONS") == "true":
         logger.info("运行在 GitHub Actions 环境")
@@ -331,8 +352,8 @@ def main():
         bot = TwitterToFeishuBot()
         bot.run_once()
         return
-    
-    # 本地运行模式
+
+    # 本地交互模式
     print("""
 ╔══════════════════════════════════════════╗
 ║     Twitter to Feishu Bot                ║
