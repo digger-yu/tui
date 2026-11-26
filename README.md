@@ -5,7 +5,7 @@
 ## 功能
 
 - 获取**多个** Twitter 用户的最新推文（通过 Nitter RSS，无需 Twitter API）
-- 将推文自动翻译成中文（Google 翻译，免费无需配置）
+- 将推文自动翻译成中文（Google / MyMemory 多引擎自动降级，免费无需配置）
 - 支持两种发送方式：**Webhook 群消息** 和 **应用 API 私聊**
 - 每个账户可独立选择发送方式
 - 避免重复发送，自动记录已处理推文
@@ -83,6 +83,18 @@ python main.py
 2. 创建企业自建应用，开启机器人能力
 3. 获取 App ID 和 App Secret
 
+### 翻译引擎配置（可选）
+
+默认 `TRANSLATOR_ENGINE=auto`，按 **已配置的 baidu/deepl → google → mymemory** 顺序自动降级，
+每个引擎的结果都会校验是否真的是中文，失败就换下一个，不会把英文原文当成译文推送。
+
+| 引擎 | 需要配置 | 说明 |
+|---|---|---|
+| google | 无 | 质量最好；GitHub Actions / 海外网络可用，中国大陆需 `HTTPS_PROXY` |
+| mymemory | 无 | 中国大陆可直连；共享 IP 有每日额度，可填 `MYMEMORY_EMAIL` 提高额度 |
+| baidu | `BAIDU_APP_ID` + `BAIDU_SECRET_KEY` | 百度翻译开放平台，免费额度足够个人使用 |
+| deepl | `DEEPL_API_KEY` | DeepL Free API Key |
+
 ## GitHub Actions 工作流
 
 `.github/workflows/bot.yml` 核心配置：
@@ -144,7 +156,6 @@ jobs:
 - Python 3.8+
 - requests - HTTP 请求
 - beautifulsoup4 - HTML 解析
-- deep-translator - 翻译库
 - python-dotenv - 环境变量管理
 
 ## 免责声明
